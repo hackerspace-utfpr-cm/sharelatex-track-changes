@@ -7,6 +7,7 @@ db = mongojs.db
 ObjectId = mongojs.ObjectId
 Settings = require "settings-sharelatex"
 
+TrackChangesApp = require "./helpers/TrackChangesApp"
 TrackChangesClient = require "./helpers/TrackChangesClient"
 MockWebApi = require "./helpers/MockWebApi"
 
@@ -47,12 +48,15 @@ describe "Getting updates", ->
 			}
 		@updates[0].meta.user_id = @deleted_user_id
 
-		TrackChangesClient.pushRawUpdates @project_id, @doc_id, @updates, (error) =>
-			throw error if error?
-			done()
+		TrackChangesApp.ensureRunning =>
+			TrackChangesClient.pushRawUpdates @project_id, @doc_id, @updates, (error) =>
+				throw error if error?
+				done()
+		return null
 
 	after: () ->
 		MockWebApi.getUserInfo.restore()
+		return null
 
 	describe "getting updates up to the limit", ->
 		before (done) ->
@@ -60,6 +64,7 @@ describe "Getting updates", ->
 				throw error if error?
 				@updates = body.updates
 				done()
+			return null
 
 		it "should fetch the user details from the web api", ->
 			MockWebApi.getUserInfo
@@ -99,6 +104,7 @@ describe "Getting updates", ->
 				throw error if error?
 				@updates = body.updates
 				done()
+			return null
 
 		it "should return as many updates as it can", ->
 			docs1 = {}

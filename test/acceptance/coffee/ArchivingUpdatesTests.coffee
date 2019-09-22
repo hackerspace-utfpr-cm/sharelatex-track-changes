@@ -7,14 +7,19 @@ db = mongojs.db
 ObjectId = mongojs.ObjectId
 Settings = require "settings-sharelatex"
 request = require "request"
-rclient = require("redis").createClient() # Only works locally for now
+rclient = require("redis").createClient(Settings.redis.history) # Only works locally for now
 
+TrackChangesApp = require "./helpers/TrackChangesApp"
 TrackChangesClient = require "./helpers/TrackChangesClient"
 MockDocStoreApi = require "./helpers/MockDocStoreApi"
 MockWebApi = require "./helpers/MockWebApi"
 
 describe "Archiving updates", ->
 	before (done) ->
+		if Settings?.trackchanges?.s3?.key.length < 1
+			message = "s3 keys not setup, this test setup will fail"
+			return done(message)
+
 		@now = Date.now()
 		@to = @now
 		@user_id = ObjectId().toString()
@@ -53,12 +58,13 @@ describe "Archiving updates", ->
 				meta: { ts: @now + (i-2048) * @hours + 10*@minutes, user_id: @user_id }
 				v: 2 * i + 2
 			}
-
-		TrackChangesClient.pushRawUpdates @project_id, @doc_id, @updates, (error) =>
-			throw error if error?
-			TrackChangesClient.flushDoc @project_id, @doc_id, (error) ->
+		TrackChangesApp.ensureRunning =>
+			TrackChangesClient.pushRawUpdates @project_id, @doc_id, @updates, (error) =>
 				throw error if error?
-				done()
+				TrackChangesClient.flushDoc @project_id, @doc_id, (error) ->
+					throw error if error?
+					done()
+		return null
 
 	after (done) ->
 		MockWebApi.getUserInfo.restore()
@@ -71,6 +77,7 @@ describe "Archiving updates", ->
 			TrackChangesClient.pushDocHistory @project_id, @doc_id, (error) ->
 				throw error if error?
 				done()
+			return null
 
 		it "should have one cached pack", (done) ->
 			db.docHistory.count { doc_id: ObjectId(@doc_id), expiresAt:{$exists:true}}, (error, count) ->
@@ -115,6 +122,7 @@ describe "Archiving updates", ->
 			TrackChangesClient.pullDocHistory @project_id, @doc_id, (error) ->
 				throw error if error?
 				done()
+			return null
 
 		it "should restore both packs", (done) ->
 			db.docHistory.count { doc_id: ObjectId(@doc_id) }, (error, count) ->

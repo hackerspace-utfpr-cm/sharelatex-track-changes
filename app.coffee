@@ -1,3 +1,5 @@
+Metrics = require "metrics-sharelatex"
+Metrics.initialize("track-changes")
 Settings = require "settings-sharelatex"
 logger = require "logger-sharelatex"
 TrackChangesLogger = logger.initialize("track-changes").logger
@@ -23,8 +25,7 @@ TrackChangesLogger.addSerializers {
 }
 
 Path = require "path"
-Metrics = require "metrics-sharelatex"
-Metrics.initialize("track-changes")
+
 Metrics.memory.monitor(logger)
 
 child_process = require "child_process"
@@ -34,6 +35,8 @@ express = require "express"
 app = express()
 
 app.use Metrics.http.monitor(logger)
+
+Metrics.injectMetricsRoute(app)
 
 app.post "/project/:project_id/doc/:doc_id/flush", HttpController.flushDoc
 
@@ -77,24 +80,19 @@ app.get "/check_lock", HttpController.checkLock
 
 app.get "/health_check",  HttpController.healthCheck
 
-profiler = require "v8-profiler"
-app.get "/profile", (req, res) ->
-	time = parseInt(req.query.time || "1000")
-	profiler.startProfiling("test")
-	setTimeout () ->
-		profile = profiler.stopProfiling("test")
-		res.json(profile)
-	, time
-
 app.use (error, req, res, next) ->
 	logger.error err: error, req: req, "an internal error occured"
 	res.send 500
 
 port = Settings.internal?.trackchanges?.port or 3015
 host = Settings.internal?.trackchanges?.host or "localhost"
-app.listen port, host, (error) ->
-	if error?
-		logger.error err: error, "could not start track-changes server"
-	else
-		logger.info "trackchanges starting up, listening on #{host}:#{port}"
+
+if !module.parent # Called directly
+	app.listen port, host, (error) ->
+		if error?
+			logger.error err: error, "could not start track-changes server"
+		else
+			logger.info "trackchanges starting up, listening on #{host}:#{port}"
+
+module.exports = app
 
